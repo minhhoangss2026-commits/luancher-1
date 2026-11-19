@@ -1,0 +1,34 @@
+name: Build iOS
+on: workflow_dispatch
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: aarch64-apple-ios }
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: "src-tauri -> target" }
+      - run: npm install
+      - run: npx tauri icon app-icon.png
+      - run: npx tauri ios init
+      - name: Build không ký
+        run: |
+          cd src-tauri/gen/apple
+          PROJ=$(ls -d *.xcodeproj | head -1)
+          SCHEME="${PROJ%.xcodeproj}_iOS"
+          xcodebuild -project "$PROJ" -scheme "$SCHEME" \
+            -configuration release -sdk iphoneos -arch arm64 \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+      - name: Đóng gói IPA
+        run: |
+          mkdir -p Payload
+          cp -R src-tauri/gen/apple/build/Build/Products/release-iphoneos/*.app Payload/
+          zip -r CosmicLauncher.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CosmicLauncher-iOS
+          path: CosmicLauncher.ipa
